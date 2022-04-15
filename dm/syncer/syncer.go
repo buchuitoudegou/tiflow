@@ -1558,6 +1558,27 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		return nil
 	}
 
+	var syncerBytesRead atomic.Int64
+	go func() {
+		start := time.Now()
+		lastTime := start
+		lastBytes := syncerBytesRead.Load()
+		ticker := time.NewTicker(1 * time.Second)
+		for {
+			select {
+			case <-ticker.C:
+				currTime := time.Now()
+				currBytes := syncerBytesRead.Load()
+				fmt.Printf("%v: %.2f MB/s\n",
+					//float64(currBytes)/1024.0/1024.0/currTime.Sub(start).Seconds(),
+					currTime.Format("2006-01-02 15:04:05"),
+					float64(currBytes-lastBytes)/1024.0/1024.0/currTime.Sub(lastTime).Seconds())
+				lastBytes = currBytes
+				lastTime = currTime
+			}
+		}
+	}()
+
 	inFinerRetry := false
 	// in release branch, we only use eventIndex to test a bug
 	eventIndex := 0
@@ -1658,6 +1679,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 			return terror.ErrSyncerGetEvent.Generate(err)
 		}
+
+		syncerBytesRead.Add(int64(len(e.RawData)))
 
 		failpoint.Inject("IgnoreSomeTypeEvent", func(val failpoint.Value) {
 			if e.Header.EventType.String() == val.(string) {
