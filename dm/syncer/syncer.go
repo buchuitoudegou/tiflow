@@ -1575,6 +1575,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 					float64(currBytes-lastBytes)/1024.0/1024.0/currTime.Sub(lastTime).Seconds())
 				lastBytes = currBytes
 				lastTime = currTime
+			case <-ctx.Done():
+				return
 			}
 		}
 	}()
