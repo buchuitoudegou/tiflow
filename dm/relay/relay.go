@@ -448,6 +448,28 @@ func (r *Relay) handleEvents(
 			return err
 		}
 	}
+	var syncerBytesRead atomic.Int64
+	go func() {
+		start := time.Now()
+		lastTime := start
+		lastBytes := syncerBytesRead.Load()
+		ticker := time.NewTicker(1 * time.Second)
+		for {
+			select {
+			case <-ticker.C:
+				currTime := time.Now()
+				currBytes := syncerBytesRead.Load()
+				fmt.Printf("%v: %.2f MB/s relay\n",
+					//float64(currBytes)/1024.0/1024.0/currTime.Sub(start).Seconds(),
+					currTime.Format("2006-01-02 15:04:05"),
+					float64(currBytes-lastBytes)/1024.0/1024.0/currTime.Sub(lastTime).Seconds())
+				lastBytes = currBytes
+				lastTime = currTime
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 
 	firstEvent := true
 	for {
@@ -478,6 +500,7 @@ func (r *Relay) handleEvents(
 			}
 			return err
 		}
+		syncerBytesRead.Add(int64(len(rResult.Event.RawData)))
 
 		binlogReadDurationHistogram.Observe(time.Since(readTimer).Seconds())
 		failpoint.Inject("BlackholeReadBinlog", func(_ failpoint.Value) {
